@@ -5,8 +5,8 @@ from cryptography.hazmat.primitives import serialization
 from rsa_keys import generate_rsa_key_pair
 
 
-KEYS_FOLDER = "keys"
-
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+KEYS_FOLDER = os.path.join(BASE_DIR, "keys")
 
 def get_user_key_paths(username):
     """Return paths for a user's RSA keys."""
