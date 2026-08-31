@@ -33,7 +33,7 @@ client/keys/
 
 # Attack simulation artifacts
 
-attacker.py
+client/attacker.py
 attacker_public.pem
 attacker_private.pem
 
