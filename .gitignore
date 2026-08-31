@@ -1,0 +1,64 @@
+# Virtual environment
+
+venv/
+.venv/
+
+# Python cache
+
+**pycache**/
+*.py[cod]
+
+# Environment / secrets
+
+.env
+.env.*
+!.env.example
+
+# Private keys
+
+*_private.pem
+*.key
+
+# Local public keys
+
+*_public.pem
+
+# Local trusted-key database
+
+trusted_keys.json
+
+# Local user RSA keys
+
+client/keys/
+
+# Attack simulation artifacts
+
+attacker.py
+attacker_public.pem
+attacker_private.pem
+
+# Backup files
+
+*_backup.py
+*_working_backup.py
+client_before_auth.py
+
+# Logs
+
+*.log
+
+# Database files
+
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE files
+
+.vscode/
+.idea/
+
+# Operating system files
+
+.DS_Store
+Thumbs.db
