@@ -20,40 +20,36 @@ print()
 
 
 # ==========================================
-# ALICE ENCRYPTS MESSAGE FOR BOB
+# ALICE CREATES MESSAGE
 # ==========================================
 
 message = "Hello Bob! This message is authenticated."
+
+message_id = "msg-001"
 
 encrypted_aes_key, nonce, ciphertext = encrypt_for_recipient(
     message,
     bob_public_key
 )
 
-print("Message encrypted.")
-print()
-
-
-# ==========================================
-# ALICE SIGNS ENCRYPTED PACKAGE
-# ==========================================
-
 signature = create_message_signature(
+    message_id,
     encrypted_aes_key,
     nonce,
     ciphertext,
     alice_private_key
 )
 
-print("Message signature created.")
+print("Message encrypted and signed.")
 print()
 
 
 # ==========================================
-# BOB VERIFIES SIGNATURE
+# FIRST DELIVERY
 # ==========================================
 
 valid = verify_message_signature(
+    message_id,
     encrypted_aes_key,
     nonce,
     ciphertext,
@@ -61,38 +57,93 @@ valid = verify_message_signature(
     alice_public_key
 )
 
-print("Signature valid:")
-print(valid)
+print("First delivery:")
+print("Signature valid:", valid)
+
+if valid:
+
+    decrypted_message = decrypt_received_message(
+        encrypted_aes_key,
+        nonce,
+        ciphertext,
+        bob_private_key
+    )
+
+    print("Decrypted message:")
+    print(decrypted_message)
+
 print()
 
 
 # ==========================================
-# BOB DECRYPTS MESSAGE
+# REPLAY ATTACK
 # ==========================================
 
-decrypted_message = decrypt_received_message(
+print("REPLAY ATTACK:")
+print("Attacker resends the exact same package.")
+print()
+
+replay_valid = verify_message_signature(
+    message_id,
     encrypted_aes_key,
     nonce,
     ciphertext,
-    bob_private_key
+    signature,
+    alice_public_key
 )
 
-print("Decrypted message:")
-print(decrypted_message)
+print("Replayed message:")
+print("Signature valid:", replay_valid)
+
+if replay_valid:
+
+    replayed_message = decrypt_received_message(
+        encrypted_aes_key,
+        nonce,
+        ciphertext,
+        bob_private_key
+    )
+
+    print("Replayed message decrypted as:")
+    print(replayed_message)
+
 print()
 
 
 # ==========================================
-# TAMPERING TEST
+# MESSAGE ID TAMPERING TEST
+# ==========================================
+
+tampered_message_id = "msg-999"
+
+id_tampered_valid = verify_message_signature(
+    tampered_message_id,
+    encrypted_aes_key,
+    nonce,
+    ciphertext,
+    signature,
+    alice_public_key
+)
+
+print("After message ID tampering:")
+print("Signature valid:", id_tampered_valid)
+print()
+
+
+# ==========================================
+# CIPHERTEXT TAMPERING TEST
 # ==========================================
 
 tampered_ciphertext = bytearray(ciphertext)
 
 tampered_ciphertext[0] ^= 1
 
-tampered_ciphertext = bytes(tampered_ciphertext)
+tampered_ciphertext = bytes(
+    tampered_ciphertext
+)
 
 tampered_valid = verify_message_signature(
+    message_id,
     encrypted_aes_key,
     nonce,
     tampered_ciphertext,
@@ -101,5 +152,4 @@ tampered_valid = verify_message_signature(
 )
 
 print("After ciphertext tampering:")
-print("Signature valid:")
-print(tampered_valid)
+print("Signature valid:", tampered_valid)

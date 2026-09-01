@@ -1,5 +1,6 @@
 import asyncio
 import json
+import secrets
 
 import websockets
 from cryptography.hazmat.primitives import serialization
@@ -211,6 +212,15 @@ async def chat_client():
             verification_queue = asyncio.Queue()
 
             # =========================================
+            # REPLAY PROTECTION
+            # =========================================
+
+            # Stores message IDs that have already
+            # passed signature verification and
+            # have been processed.
+            seen_message_ids = set()
+
+            # =========================================
             # RECEIVE MESSAGES
             # =========================================
 
@@ -333,6 +343,55 @@ async def chat_client():
                             )
 
                             # =========================================
+                            # RECOVER MESSAGE ID
+                            # =========================================
+
+                            message_id = package.get(
+                                "message_id"
+                            )
+
+                            if not message_id:
+
+                                print()
+                                print(
+                                    "🚨 SECURITY WARNING 🚨"
+                                )
+
+                                print(
+                                    "Message has no message ID."
+                                )
+
+                                print(
+                                    "MESSAGE BLOCKED."
+                                )
+
+                                continue
+
+                            # =========================================
+                            # VALIDATE MESSAGE ID
+                            # =========================================
+
+                            if not isinstance(
+                                message_id,
+                                str
+                            ):
+
+                                print()
+                                print(
+                                    "🚨 SECURITY WARNING 🚨"
+                                )
+
+                                print(
+                                    "Invalid message ID."
+                                )
+
+                                print(
+                                    "MESSAGE BLOCKED."
+                                )
+
+                                continue
+
+                            # =========================================
                             # RECOVER ENCRYPTED AES KEY
                             # =========================================
 
@@ -401,7 +460,8 @@ async def chat_client():
 
                                 print()
                                 print(
-                                    f"Cannot verify {sender}'s message."
+                                    f"Cannot verify "
+                                    f"{sender}'s message."
                                 )
 
                                 print(
@@ -416,6 +476,7 @@ async def chat_client():
 
                             signature_valid = (
                                 verify_message_signature(
+                                    message_id,
                                     encrypted_aes_key,
                                     nonce,
                                     ciphertext,
@@ -445,6 +506,48 @@ async def chat_client():
                             print()
                             print(
                                 "✓ Message signature verified."
+                            )
+
+                            # =========================================
+                            # REPLAY ATTACK DETECTION
+                            # =========================================
+
+                            if message_id in seen_message_ids:
+
+                                print()
+                                print(
+                                    "🚨 SECURITY WARNING 🚨"
+                                )
+
+                                print(
+                                    "Replay attack detected!"
+                                )
+
+                                print(
+                                    f"Message ID {message_id} "
+                                    "has already been processed."
+                                )
+
+                                print(
+                                    "MESSAGE BLOCKED."
+                                )
+
+                                continue
+
+                            # =========================================
+                            # RECORD MESSAGE ID
+                            # =========================================
+
+                            # Only record the ID after the
+                            # signature has been successfully
+                            # verified.
+                            seen_message_ids.add(
+                                message_id
+                            )
+
+                            print()
+                            print(
+                                "✓ Message accepted."
                             )
 
                             # =========================================
@@ -572,13 +675,17 @@ async def chat_client():
 
                                 print()
                                 print("Expected:")
+
                                 print(
                                     trusted_fingerprint
                                 )
 
                                 print()
                                 print("Received:")
-                                print(fingerprint)
+
+                                print(
+                                    fingerprint
+                                )
 
                                 print()
                                 print(
@@ -895,10 +1002,19 @@ async def chat_client():
                     )
 
                     # =========================================
+                    # CREATE UNIQUE MESSAGE ID
+                    # =========================================
+
+                    message_id = secrets.token_hex(
+                        16
+                    )
+
+                    # =========================================
                     # CREATE MESSAGE SIGNATURE
                     # =========================================
 
                     signature = create_message_signature(
+                        message_id,
                         encrypted_aes_key,
                         nonce,
                         ciphertext,
@@ -910,6 +1026,9 @@ async def chat_client():
                     # =========================================
 
                     encrypted_package = {
+
+                        "message_id":
+                            message_id,
 
                         "encrypted_key":
                             encrypted_aes_key.hex(),
@@ -935,7 +1054,8 @@ async def chat_client():
 
                     print()
                     print(
-                        "Encrypted and signed message sent."
+                        "Encrypted, signed and "
+                        "replay-protected message sent."
                     )
 
             finally:

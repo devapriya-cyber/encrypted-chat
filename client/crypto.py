@@ -108,6 +108,7 @@ def decrypt_received_message(
 
 
 def create_message_signature(
+    message_id,
     encrypted_aes_key,
     nonce,
     ciphertext,
@@ -115,11 +116,15 @@ def create_message_signature(
 ):
     """
     Create an RSA-PSS signature over the
-    encrypted message package.
+    message ID and encrypted message package.
+
+    Including the message ID in the signature
+    prevents an attacker from changing it.
     """
 
     data_to_sign = (
-        encrypted_aes_key
+        message_id.encode("utf-8")
+        + encrypted_aes_key
         + nonce
         + ciphertext
     )
@@ -131,6 +136,7 @@ def create_message_signature(
 
 
 def verify_message_signature(
+    message_id,
     encrypted_aes_key,
     nonce,
     ciphertext,
@@ -138,12 +144,13 @@ def verify_message_signature(
     sender_public_key
 ):
     """
-    Verify the RSA-PSS signature of an
-    encrypted message package.
+    Verify the RSA-PSS signature over the
+    message ID and encrypted message package.
     """
 
     data_to_verify = (
-        encrypted_aes_key
+        message_id.encode("utf-8")
+        + encrypted_aes_key
         + nonce
         + ciphertext
     )
