@@ -1,239 +1,163 @@
-# 🔐 Secure Encrypted Chat
+# Secure Encrypted Chat
 
-A Python-based secure messaging application developed as a cybersecurity project to demonstrate practical cryptography, authentication, message integrity, trusted public-key verification, replay protection, and MITM attack detection.
+A Python-based encrypted chat application built to demonstrate secure communication concepts such as hybrid encryption, digital signatures, public-key authentication, fingerprint verification, and replay attack protection.
 
-> **Educational project:** This application is designed for learning and controlled security demonstrations. It is not intended to be a production-ready secure messaging platform.
+This project was developed as a cybersecurity learning project and focuses on understanding how different security mechanisms work together in a chat application.
 
----
-
-## 🚀 Project Overview
-
-The Secure Encrypted Chat application demonstrates how different cryptographic mechanisms can work together to protect communication between users.
-
-The project implements:
+## Features
 
 - RSA-3072 public/private key pairs
 - AES-256-GCM message encryption
-- RSA-OAEP hybrid encryption
+- RSA-OAEP encryption for securely transferring AES keys
 - RSA-PSS digital signatures
-- SHA-256 public-key fingerprints
+- Public-key fingerprint verification
+- Trusted public-key storage
 - Challenge-response authentication
-- Trusted public-key verification
 - Replay attack detection
-- MITM/public-key substitution attack simulation
-- Automated security tests
+- MITM (Man-in-the-Middle) attack simulation
+- Public-key substitution detection
+- Authentication attack simulation
+- WebSocket-based client-server communication
 
-The main objective is to understand how confidentiality, integrity, authentication, and key verification can be implemented in a practical Python application.
+## How the Encryption Works
 
----
+The application uses hybrid encryption.
 
-## 🛡️ Security Features
+Instead of encrypting the entire message using RSA, a random AES key is generated for each message.
 
-### 🔑 RSA-3072 Key Generation
+The process is:
 
-Each user has an RSA-3072 public/private key pair.
+1. A random AES-256 key is generated.
+2. The message is encrypted using AES-256-GCM.
+3. The AES key is encrypted using the recipient's RSA public key with RSA-OAEP.
+4. The sender creates a digital signature for the encrypted message package.
+5. The encrypted AES key, nonce, ciphertext, message ID, and signature are sent through the server.
+6. The recipient verifies the sender's signature.
+7. The recipient checks the message ID for replay attacks.
+8. The encrypted AES key is decrypted using the recipient's RSA private key.
+9. The original message is decrypted using AES-256-GCM.
+
+The server forwards encrypted messages but does not decrypt their contents.
+
+## Security Mechanisms
+
+### AES-256-GCM
+
+AES-256-GCM is used for message encryption.
+
+It provides:
+
+- Confidentiality
+- Integrity
+- Authentication
+
+A unique nonce is generated for each encrypted message.
+
+### RSA-OAEP
+
+RSA-OAEP is used to encrypt the randomly generated AES key.
+
+This allows the AES key to be securely transferred to the intended recipient without sending it directly.
+
+### RSA-PSS Digital Signatures
+
+Messages are digitally signed using the sender's RSA private key.
+
+The signature covers:
+
+- Message ID
+- Encrypted AES key
+- Nonce
+- Ciphertext
+
+This allows the recipient to detect changes to the encrypted message package.
+
+### Public-Key Fingerprints
+
+Public-key fingerprints are generated using SHA-256 over the public key's DER SubjectPublicKeyInfo representation.
 
 Example:
 
 ```text
-client/keys/
-├── alice_private.pem
-├── alice_public.pem
-├── bob_private.pem
-└── bob_public.pem
+fdc4:89e4:03f0:39e3:00c3:3b4e:d50a:1038:4af0:1887:d366:33e4:ae14:1cc4:7786:180f
 
-Private keys are excluded from Git using .gitignore.
+The fingerprint can be compared with a previously trusted fingerprint to detect public-key substitution.
 
-🔒 AES-256-GCM Encryption
+Trusted Keys
 
-Messages are encrypted using AES-256-GCM.
+Trusted public-key fingerprints are stored locally in:
 
-AES-GCM provides authenticated encryption and protects the confidentiality and integrity of the encrypted message.
+client/trusted_keys.json
 
-The message package contains:
+The trusted-key database is intentionally excluded from Git because it contains local trust information.
 
-Encrypted AES Key
-Nonce
-Ciphertext
-Message ID
-Signature
-🔐 Hybrid Encryption
+Challenge-Response Authentication
 
-The project uses hybrid encryption instead of using RSA to encrypt the entire message.
+When a client connects to the server:
 
-The process is:
+The client sends its username.
+The client sends its public key.
+The server generates a random authentication challenge.
+The client signs the challenge using its private key.
+The server verifies the signature using the submitted public key.
+Authentication succeeds only if the signature is valid.
 
-Random AES-256 Key
-        │
-        ▼
-   AES-256-GCM
-        │
-        ▼
-Encrypted Message
+This demonstrates public-key based authentication without sending the private key.
 
+Replay Attack Protection
 
-AES Key
-   │
-   ▼
-Recipient RSA Public Key
-   │
-   ▼
-RSA-OAEP
-   │
-   ▼
-Encrypted AES Key
+Every message contains a unique message ID.
 
-The recipient uses their RSA private key to recover the AES key and decrypt the message.
+The client maintains a set of previously accepted message IDs.
 
-🔐 RSA-OAEP
-
-RSA-OAEP is used to securely encrypt the randomly generated AES key.
-
-The implementation uses SHA-256 with MGF1.
-
-✍️ RSA-PSS Digital Signatures
-
-Messages are digitally signed using RSA-PSS.
-
-The signature covers:
-
-message_id
-+
-encrypted AES key
-+
-nonce
-+
-ciphertext
-
-The receiver verifies the signature before accepting the message.
-
-If any signed data is modified, signature verification fails.
-
-🆔 Message IDs
-
-Each message contains a message identifier.
-
-Example:
-
-msg-001
-msg-002
-msg-003
-
-The message ID is included in the digital signature and is also used for replay detection.
-
-🔁 Replay Attack Protection
-
-The client maintains a record of message IDs that have already been processed.
-
-seen_message_ids = set()
-
-When a message arrives:
-
-The signature is verified.
-The message ID is checked.
-If the ID was already processed, the message is rejected.
-Otherwise, the ID is recorded.
-The message is accepted and decrypted.
+If the same message ID is received again, the message is rejected as a replay attack.
 
 Example:
 
 First delivery:
-msg-001 → Accepted
+✓ Message accepted.
 
-Replay:
-msg-001 → 🚨 Replay attack detected → Blocked
+Second delivery:
+Replay attack detected!
 
-New message:
-msg-002 → Accepted
+The current implementation keeps the replay state in memory for the running client session.
 
-The current implementation keeps replay state in memory for the running client session.
+MITM Attack Simulation
 
-🔎 Public-Key Fingerprints
+The project includes a controlled MITM attack simulation.
 
-The application generates a SHA-256 fingerprint from a user's public key.
+The attack server intentionally replaces Bob's legitimate public key with an attacker's public key when Alice requests Bob's key.
 
-The public key is converted to DER format before hashing.
+Alice receives the attacker's public key and calculates its fingerprint.
 
-Example:
-
-fdc4:89e4:03f0:39e3:00c3:3b4e:d50a:1038:
-4af0:1887:d366:33e4:ae14:1cc4:7786:180f
-
-Fingerprints provide a compact way to compare and verify public keys.
-
-🔐 Trusted Public Keys
-
-Trusted fingerprints are stored locally in:
-
-client/trusted_keys.json
-
-When a public key is received, its fingerprint can be compared with the trusted fingerprint.
-
-If the fingerprint does not match, the client blocks the communication.
-
-Example:
-
-🚨 SECURITY WARNING 🚨
-
-Public key mismatch!
-MESSAGE BLOCKED.
-🚨 MITM Attack Simulation
-
-The project includes a controlled Man-in-the-Middle/public-key substitution attack simulation.
-
-The attack attempts to replace Bob's legitimate public key with an attacker's public key.
-
-Normal Communication
-Alice
-  │
-  │ Bob's legitimate public key
-  ▼
-Server
-  │
-  ▼
-Bob
-MITM Simulation
-Alice
-  │
-  │ Requests Bob's public key
-  ▼
-Attack Simulation
-  │
-  │ Replaces Bob's key
-  ▼
-Attacker's Public Key
-  │
-  ▼
-Alice
-
-Alice calculates the fingerprint of the received public key.
-
-Because the attacker's public key produces a different fingerprint, Alice detects the substitution and blocks the communication.
+Because the fingerprint does not match the trusted fingerprint, Alice blocks the communication.
 
 Example:
 
 Public key received for bob.
 
 bob's fingerprint:
-ddb9:9ac3:4896:fd8d:25f9:2dbb:5cbb:
-dc7b:f5fe:9c46:32b8:0d43:592e:6727:b96d:45c3
+ddb9:9ac3:4896:fd8d:25f9:2dbb:5cbb:dc7b:f5fe:9c46:32b8:0d43:592e:6727:b96d:45c3
 
 🚨 SECURITY WARNING 🚨
 Public key mismatch!
 MESSAGE BLOCKED.
-📸 MITM Attack Detection Proof
 
-The following screenshot demonstrates the client detecting the substituted public key and blocking the communication.
+This demonstrates how fingerprint verification can help detect public-key substitution.
 
-🧪 Attacker Impersonation Test
+The attack simulation screenshot is included in the repository:
 
-The project also includes an authentication attack test.
+mitm-detection.png
 
-The attacker attempts to connect using an existing username while providing a different public key.
+Authentication Attack Test
 
-The attack-test server compares the submitted public key with the registered public key.
+The project also contains an authentication attack simulation.
 
-Example result:
+The attacker attempts to connect using Bob's identity but provides a different public key.
+
+The attack server compares the submitted public key with Bob's registered public key.
+
+The attack is rejected:
 
 Attacker connected as bob.
 Attacker public key sent.
@@ -243,75 +167,10 @@ AUTH_FAILED|Public key does not match registered key
 
 Attack test stopped: no authentication challenge.
 
-This demonstrates protection against simple public-key substitution during authentication in the attack-test environment.
+This demonstrates why a username alone should not be trusted as an identity.
 
-🔐 Challenge-Response Authentication
-
-The application uses a challenge-response mechanism to demonstrate proof of possession of a private key.
-
-The process is:
-
-CLIENT                         SERVER
-
-Username -------------------->
-
-Public Key ------------------>
-
-                  Generate Random Challenge
-                  <-------------------------
-
-Sign Challenge
-using Private Key
-
-Signature ------------------->
-
-                  Verify Signature
-                         │
-                  ┌──────┴──────┐
-                  │             │
-                Valid         Invalid
-                  │             │
-                  ▼             ▼
-            AUTH_SUCCESS   AUTH_FAILED
-
-The private key itself is never sent to the server during authentication.
-
-🧱 Architecture
-                  ┌─────────────────────┐
-                  │       ALICE         │
-                  │                     │
-                  │ RSA Keys            │
-                  │ AES-GCM             │
-                  │ RSA-OAEP            │
-                  │ RSA-PSS             │
-                  │ Fingerprint         │
-                  │ Replay Protection   │
-                  └──────────┬──────────┘
-                             │
-                             │ WebSocket
-                             ▼
-                  ┌─────────────────────┐
-                  │       SERVER        │
-                  │                     │
-                  │ Authentication      │
-                  │ Public Keys         │
-                  │ Message Routing     │
-                  └──────────┬──────────┘
-                             │
-                             │ WebSocket
-                             ▼
-                  ┌─────────────────────┐
-                  │        BOB          │
-                  │                     │
-                  │ RSA Keys            │
-                  │ AES-GCM             │
-                  │ RSA-OAEP            │
-                  │ RSA-PSS             │
-                  │ Fingerprint         │
-                  │ Replay Protection   │
-                  └─────────────────────┘
-📁 Project Structure
-encrypted-chat/
+Project Structure
+encrypted_chat/
 │
 ├── client/
 │   ├── client.py
@@ -320,15 +179,6 @@ encrypted-chat/
 │   ├── key_manager.py
 │   ├── rsa_keys.py
 │   ├── trusted_keys.py
-│   ├── trusted_keys.json
-│   │
-│   ├── attacker.py
-│   │
-│   ├── keys/
-│   │   ├── alice_private.pem
-│   │   ├── alice_public.pem
-│   │   ├── bob_private.pem
-│   │   └── bob_public.pem
 │   │
 │   ├── test_crypto.py
 │   ├── test_fingerprint.py
@@ -349,334 +199,180 @@ encrypted-chat/
 ├── README.md
 ├── requirements.txt
 └── .gitignore
-🧪 Security Tests
-AES Encryption Test
-python client\test_crypto.py
 
-Tests AES encryption and decryption.
+Local cryptographic material such as private keys, public keys, trusted-key databases, and attacker test keys are intentionally excluded from Git.
 
-Fingerprint Test
-python client\test_fingerprint.py
+Running the Project
+1. Install Dependencies
 
-Tests public-key fingerprint generation.
+Create and activate a virtual environment if required.
 
-Hybrid Encryption Test
-python client\test_hybrid.py
-
-Tests AES encryption together with RSA-OAEP key protection.
-
-RSA Test
-python client\test_rsa.py
-
-Tests RSA encryption and decryption.
-
-Digital Signature Test
-python client\test_signature.py
-
-Tests valid and tampered signatures.
-
-Message Signature Test
-python client\test_message_signature.py
-
-Tests message signature verification and tamper detection.
-
-Replay Protection Test
-python client\test_replay_protection.py
-
-Tests detection of repeated message IDs.
-
-Trusted Key Test
-python client\test_trusted_keys.py
-
-Tests trusted fingerprint storage and retrieval.
-
-💻 Technologies
-Programming
-Python 3
-Cryptography
-RSA-3072
-AES-256-GCM
-RSA-OAEP
-RSA-PSS
-SHA-256
-Networking
-WebSockets
-Python websockets
-Development
-Git
-GitHub
-PowerShell
-📦 Installation
-
-Clone the repository:
-
-git clone https://github.com/devapriya-cyber/encrypted-chat.git
-
-Enter the project directory:
-
-cd encrypted-chat
-
-Create a virtual environment:
-
-python -m venv venv
-
-Activate it:
-
-.\venv\Scripts\Activate.ps1
-
-Install dependencies:
+Then install the dependencies:
 
 pip install -r requirements.txt
-▶️ Running the Normal Application
-Start the server
+2. Start the Normal Server
+
+Open PowerShell in the project directory and run:
+
 python server\server.py
 
 The normal server runs on:
 
 ws://localhost:8765
-Start the client
+3. Start the Client
 
-In another terminal:
+Open another PowerShell window and run:
 
 python client\client.py
 
-Start another client instance for the second user when required.
+The client can then connect to the server and communicate with another authenticated user.
 
-🚨 Running the Attack Simulation
+Running the Security Tests
 
-Start the attack-test server:
+Individual tests can be executed using Python.
+
+AES Encryption Test
+python client\test_crypto.py
+Fingerprint Test
+python client\test_fingerprint.py
+Hybrid Encryption Test
+python client\test_hybrid.py
+RSA Test
+python client\test_rsa.py
+Digital Signature Test
+python client\test_signature.py
+Message Signature Test
+python client\test_message_signature.py
+Replay Protection Test
+python client\test_replay_protection.py
+Trusted-Key Test
+python client\test_trusted_keys.py
+Key Management Test
+python client\test_keys.py
+
+Note: the key-generation test creates or replaces local RSA key files, so it should only be run when intentionally generating new keys.
+
+Running the MITM Attack Simulation
+
+The attack simulation uses a separate WebSocket server on port 8766.
+
+Start the attack test server:
 
 python server\server_attack_test.py
 
-The attack-test server runs on:
-
-ws://localhost:8766
-
-Run the client against the attack-test server:
+Then run the client in attack-test mode:
 
 python client\client.py --attack-test
 
-The attack server intentionally substitutes Bob's public key with the attacker's public key to demonstrate MITM detection.
+The attack server performs two main security tests:
 
-🔬 Security Demonstration Flow
-1. Start attack-test server
-          │
-          ▼
-2. Alice connects
-          │
-          ▼
-3. Alice authenticates
-          │
-          ▼
-4. Alice requests Bob's public key
-          │
-          ▼
-5. Attack simulation replaces
-   Bob's key with attacker's key
-          │
-          ▼
-6. Alice receives substituted key
-          │
-          ▼
-7. Alice calculates fingerprint
-          │
-          ▼
-8. Fingerprint does not match
-   trusted Bob fingerprint
-          │
-          ▼
-9. 🚨 Security warning
-          │
-          ▼
-10. Communication blocked
-🔍 Cryptographic Design
-Security Function	Algorithm	Purpose
-Asymmetric cryptography	RSA-3072	Key operations and authentication
-Message encryption	AES-256-GCM	Confidentiality and authenticated encryption
-AES key protection	RSA-OAEP	Encrypt AES keys
-Digital signatures	RSA-PSS	Authentication and integrity
-Fingerprinting	SHA-256	Public-key identification
-Communication	WebSockets	Client-server transport
-🎯 Why Hybrid Encryption?
+Authentication attack using an incorrect public key.
+MITM public-key substitution when Alice requests Bob's public key.
 
-RSA is not efficient for encrypting large amounts of data.
+The client should detect the substituted key using fingerprint verification and block the communication.
 
-Therefore, the application uses:
-
+Technologies Used
+Python
+WebSockets
+Cryptography library
 RSA
- ↓
-Protect AES key
-
-AES-GCM
- ↓
-Encrypt message
-
-This allows the system to combine the advantages of asymmetric and symmetric cryptography.
-
-🛡️ Security Properties Demonstrated
-Confidentiality
-
-AES-256-GCM encrypts message content.
-
-Integrity
-
-AES-GCM authentication and RSA-PSS signatures help detect modification.
-
-Authentication
-
-Challenge-response authentication demonstrates proof of possession of a private key.
-
-Public-Key Verification
-
-SHA-256 fingerprints allow unexpected public-key changes to be detected.
-
-Replay Detection
-
-Previously processed message IDs are rejected during the current client session.
-
-MITM Detection
-
-A substituted public key produces a different fingerprint and can be blocked.
-
-⚠️ Security Limitations
-
-This is an educational prototype and has important limitations.
-
-Session-Based Replay Protection
-
-Replay protection currently uses an in-memory set:
-
-seen_message_ids = set()
-
-Replay state is therefore lost when the client application is restarted.
-
-Local Trusted-Key Storage
-
-Trusted fingerprints are stored locally rather than using a production-grade identity and trust infrastructure.
-
-Localhost Demonstration
-
-The project is primarily designed for local testing using:
-
-localhost
-Attack Server
-
-server_attack_test.py intentionally performs attack simulations and should not be used as a production server.
-
-Transport Security
-
-The demonstration uses local WebSocket communication. A real deployment would require secure transport such as TLS/WSS.
-
-Key Management
-
-The project demonstrates cryptographic key management concepts but does not implement a complete production-grade key management system.
-
-No Forward Secrecy
-
-The current RSA-based design does not implement a modern forward-secret key agreement protocol.
-
-🎓 Learning Objectives
-
-This project was created to gain practical experience with:
-
-Applied cryptography
-RSA key generation
-Symmetric encryption
-Asymmetric encryption
-Hybrid encryption
-AES-GCM
+AES-256-GCM
 RSA-OAEP
 RSA-PSS
+SHA-256
+JSON
+PowerShell
+Git and GitHub
+Security Design
+
+The project separates different security goals:
+
+Security Goal	Mechanism
+Message confidentiality	AES-256-GCM
+AES key protection	RSA-OAEP
+Message integrity	AES-GCM authentication tag + digital signature
+Sender authentication	RSA-PSS signatures
+Public-key verification	SHA-256 fingerprint
+Replay protection	Unique message IDs
+Connection authentication	Challenge-response
+MITM detection	Trusted fingerprint comparison
+Important Security Limitations
+
+This project is an educational prototype and should not be considered production-ready secure messaging software.
+
+Some limitations include:
+
+The normal server does not maintain a permanent username-to-public-key registration database.
+The normal server currently authenticates a user based on the public key submitted during that connection.
+Trusted-key verification is performed on the client side.
+Replay protection is stored only in memory and is reset when the client restarts.
+There is no persistent message history or secure key rotation system.
+Private keys are stored locally without password-based encryption.
+There is no forward secrecy using protocols such as Diffie-Hellman or X25519.
+The system has not undergone a professional security audit.
+
+These limitations are intentional in parts of the project because the main purpose is to demonstrate and understand individual cybersecurity concepts.
+
+Possible Future Improvements
+
+Some improvements that could make the project stronger include:
+
+Permanent server-side public-key registration
+X25519 or another forward-secret key exchange
+Persistent replay protection with message expiry
+Encrypted private-key storage
+Secure key rotation
+Certificate or public-key infrastructure
+Multi-device identity management
+Better session management
+Secure message history
+Rate limiting
+Logging and security monitoring
+Automated security testing
+Formal protocol design and security review
+What I Learned
+
+Through this project, I practiced implementing and testing several practical cryptographic concepts instead of only studying them theoretically.
+
+The main concepts I worked with were:
+
+Symmetric and asymmetric encryption
+Hybrid encryption
+RSA key generation
+RSA-OAEP
+RSA-PSS
+AES-GCM
 Digital signatures
 Public-key fingerprints
-Authentication
 Trusted-key verification
-Replay attacks
-MITM attacks
-Public-key substitution
+Challenge-response authentication
+Replay attack detection
+MITM attack simulation
+Public-key substitution attacks
 WebSocket communication
 Security testing
-Attack simulation
-📊 Example Test Results
-Digital Signature
-Signature valid: True
-Tampered data valid: False
-Replay Protection
-First delivery accepted.
+Git and GitHub project management
 
-Replay detected:
-Message ID msg-001 has already been processed.
+The project also helped me understand an important security principle:
 
-New message msg-002 accepted.
-MITM Detection
-Public key received for bob.
+Encryption alone is not enough. The application also needs a way to authenticate identities and verify that the keys being used actually belong to the intended users.
 
-🚨 SECURITY WARNING 🚨
-Public key mismatch!
-MESSAGE BLOCKED.
-Impersonation Test
-Attacker connected as bob.
-Attacker public key sent.
+Disclaimer
 
-Server response:
-AUTH_FAILED|Public key does not match registered key
+This project is intended for educational and cybersecurity learning purposes.
 
-Attack test stopped: no authentication challenge.
-📸 Security Demonstration Evidence
+The attack simulations are performed against a local test server and are designed to demonstrate security concepts in a controlled environment.
 
-The repository includes:
+Do not use the attack components against systems or networks without authorization.
 
-mitm-detection.png
-
-This screenshot provides visual evidence of the MITM/public-key substitution detection implemented in the project.
-
-🚀 Future Improvements
-
-Possible improvements for a more advanced implementation include:
-
-TLS/WSS communication
-Forward secrecy using modern key agreement
-Persistent replay protection
-Secure key rotation
-Improved identity verification
-Secure encrypted key storage
-Session expiration
-Rate limiting
-Better logging and monitoring
-Multi-device key management
-Stronger production-grade trust establishment
-Additional automated security tests
-📚 Important Security Note
-
-This project demonstrates real cryptographic primitives and security concepts, but it should not be considered a production-secure messaging application.
-
-Real-world secure messaging systems require extensive threat modeling, secure key management, authenticated transport, forward secrecy, secure implementation practices, and independent security auditing.
-
-The attack simulations included in this repository are intended only for controlled, authorized cybersecurity testing.
-
-👩‍💻 Author
+Author
 
 Devapriya
 
-Cybersecurity Student
+Cybersecurity Student | BCA Graduate
 
-Areas demonstrated in this project:
+GitHub Repository:
 
-Python
-Cryptography
-Cybersecurity
-Security Testing
-Network Security
-Authentication
-MITM Detection
-⭐ GitHub Repository
+https://github.com/devapriya-cyber/encrypted-chat
 
-https://github.com/devapriya-cyber/encrypted-chat.git
-
-If this project helped you understand practical cryptography and secure communication, consider giving the repository a ⭐.
-
-📜 Disclaimer
-
-This project is intended for educational purposes and authorized security testing only.
-
-Do not use the attack simulation components against systems, networks, accounts, or users without explicit permission.
+This project was created as part of my cybersecurity learning journey and can also be used as a practical project to discuss encryption, authentication, attack simulation, and security testing during an interview.
