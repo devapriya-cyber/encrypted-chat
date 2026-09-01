@@ -4,10 +4,20 @@ import json
 import websockets
 from cryptography.hazmat.primitives import serialization
 
-from crypto import encrypt_for_recipient, decrypt_received_message
-from key_manager import load_private_key, load_public_key
-from rsa_keys import sign_data
+from crypto import (
+    encrypt_for_recipient,
+    decrypt_received_message,
+    create_message_signature,
+    verify_message_signature
+)
+
+from key_manager import (
+    load_private_key,
+    load_public_key
+)
+
 from fingerprint import get_public_key_fingerprint
+
 from trusted_keys import (
     get_trusted_fingerprint,
     save_trusted_key
@@ -18,6 +28,7 @@ SERVER_URL = "ws://localhost:8765"
 
 
 def public_key_to_text(public_key):
+
     return public_key.public_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo
@@ -25,6 +36,7 @@ def public_key_to_text(public_key):
 
 
 def text_to_public_key(public_key_text):
+
     return serialization.load_pem_public_key(
         public_key_text.encode("utf-8")
     )
@@ -32,31 +44,35 @@ def text_to_public_key(public_key_text):
 
 async def chat_client():
 
-    # -----------------------------------------
+    # =========================================
     # USERNAME
-    # -----------------------------------------
+    # =========================================
 
     username = input(
         "Enter your username: "
     ).strip().lower()
 
     if not username:
+
         print("Invalid username.")
         return
 
-    # -----------------------------------------
+    # =========================================
     # LOAD RSA KEYS
-    # -----------------------------------------
+    # =========================================
 
     try:
+
         private_key = load_private_key(username)
         public_key = load_public_key(username)
 
     except FileNotFoundError:
+
         print()
         print(
             f"No RSA keys found for {username}."
         )
+
         return
 
     print()
@@ -64,9 +80,9 @@ async def chat_client():
         f"Loaded {username}'s RSA keys."
     )
 
-    # -----------------------------------------
+    # =========================================
     # CONNECT TO SERVER
-    # -----------------------------------------
+    # =========================================
 
     try:
 
@@ -74,15 +90,15 @@ async def chat_client():
             SERVER_URL
         ) as websocket:
 
-            # -----------------------------------------
+            # =========================================
             # REGISTER USERNAME
-            # -----------------------------------------
+            # =========================================
 
             await websocket.send(username)
 
-            # -----------------------------------------
+            # =========================================
             # SEND PUBLIC KEY
-            # -----------------------------------------
+            # =========================================
 
             await websocket.send(
                 public_key_to_text(public_key)
@@ -93,9 +109,9 @@ async def chat_client():
                 f"Connected to server as {username}."
             )
 
-            # -----------------------------------------
-            # AUTHENTICATION
-            # -----------------------------------------
+            # =========================================
+            # AUTHENTICATION CHALLENGE
+            # =========================================
 
             auth_message = await websocket.recv()
 
@@ -109,8 +125,7 @@ async def chat_client():
                 )
 
                 print(
-                    f"Server response: "
-                    f"{auth_message}"
+                    f"Server response: {auth_message}"
                 )
 
                 return
@@ -129,13 +144,17 @@ async def chat_client():
 
                 print()
                 print(
-                    "Invalid authentication "
-                    "challenge."
+                    "Invalid authentication challenge."
                 )
 
                 return
 
-            # Sign challenge using private key
+            # =========================================
+            # SIGN AUTHENTICATION CHALLENGE
+            # =========================================
+
+            from rsa_keys import sign_data
+
             signature = sign_data(
                 challenge,
                 private_key
@@ -146,9 +165,9 @@ async def chat_client():
                 + signature.hex()
             )
 
-            # -----------------------------------------
+            # =========================================
             # AUTHENTICATION RESULT
-            # -----------------------------------------
+            # =========================================
 
             auth_result = await websocket.recv()
 
@@ -160,21 +179,19 @@ async def chat_client():
                 )
 
                 print(
-                    f"Server response: "
-                    f"{auth_result}"
+                    f"Server response: {auth_result}"
                 )
 
                 return
 
             print()
             print(
-                f"{username} authenticated "
-                f"successfully."
+                f"{username} authenticated successfully."
             )
 
-            # -----------------------------------------
+            # =========================================
             # COMMANDS
-            # -----------------------------------------
+            # =========================================
 
             print()
             print("Commands:")
@@ -183,9 +200,9 @@ async def chat_client():
             print("  exit")
             print()
 
-            # -----------------------------------------
-            # PUBLIC KEY STORAGE
-            # -----------------------------------------
+            # =========================================
+            # KEY STORAGE
+            # =========================================
 
             known_public_keys = {}
 
@@ -193,9 +210,9 @@ async def chat_client():
 
             verification_queue = asyncio.Queue()
 
-            # -----------------------------------------
+            # =========================================
             # RECEIVE MESSAGES
-            # -----------------------------------------
+            # =========================================
 
             async def receive_messages():
 
@@ -203,9 +220,9 @@ async def chat_client():
 
                     async for raw_message in websocket:
 
-                        # -----------------------------------------
+                        # =========================================
                         # PUBLIC KEY RESPONSE
-                        # -----------------------------------------
+                        # =========================================
 
                         if raw_message.startswith(
                             "PUBLIC_KEY|"
@@ -217,6 +234,7 @@ async def chat_client():
                             )
 
                             if len(parts) != 3:
+
                                 continue
 
                             received_username = (
@@ -261,17 +279,16 @@ async def chat_client():
                                 print()
                                 print(
                                     "Could not process "
-                                    f"{received_username}'s "
-                                    "public key:"
+                                    f"{received_username}'s public key:"
                                 )
 
                                 print(error)
 
                             continue
 
-                        # -----------------------------------------
+                        # =========================================
                         # SERVER ERROR
-                        # -----------------------------------------
+                        # =========================================
 
                         if raw_message.startswith(
                             "ERROR|"
@@ -279,8 +296,7 @@ async def chat_client():
 
                             print()
                             print(
-                                f"Server: "
-                                f"{raw_message[6:]}"
+                                f"Server: {raw_message[6:]}"
                             )
 
                             print(
@@ -291,9 +307,9 @@ async def chat_client():
 
                             continue
 
-                        # -----------------------------------------
+                        # =========================================
                         # ENCRYPTED MESSAGE
-                        # -----------------------------------------
+                        # =========================================
 
                         try:
 
@@ -308,33 +324,132 @@ async def chat_client():
                                 sender.strip().lower()
                             )
 
-                            # Convert JSON string to dictionary
+                            # =========================================
+                            # PARSE JSON
+                            # =========================================
+
                             package = json.loads(
                                 encrypted_package
                             )
 
-                            # Recover encrypted AES key
+                            # =========================================
+                            # RECOVER ENCRYPTED AES KEY
+                            # =========================================
+
                             encrypted_aes_key = (
                                 bytes.fromhex(
-                                    package[
-                                        "encrypted_key"
-                                    ]
+                                    package["encrypted_key"]
                                 )
                             )
 
-                            # Recover AES nonce
+                            # =========================================
+                            # RECOVER NONCE
+                            # =========================================
+
                             nonce = bytes.fromhex(
                                 package["nonce"]
                             )
 
-                            # Recover AES ciphertext
+                            # =========================================
+                            # RECOVER CIPHERTEXT
+                            # =========================================
+
                             ciphertext = bytes.fromhex(
                                 package["ciphertext"]
                             )
 
-                            # -----------------------------------------
-                            # DECRYPT
-                            # -----------------------------------------
+                            # =========================================
+                            # RECOVER SIGNATURE
+                            # =========================================
+
+                            signature_hex = package.get(
+                                "signature"
+                            )
+
+                            if not signature_hex:
+
+                                print()
+                                print(
+                                    "🚨 SECURITY WARNING 🚨"
+                                )
+
+                                print(
+                                    "Message has no signature."
+                                )
+
+                                print(
+                                    "MESSAGE BLOCKED."
+                                )
+
+                                continue
+
+                            signature = bytes.fromhex(
+                                signature_hex
+                            )
+
+                            # =========================================
+                            # FIND VERIFIED SENDER KEY
+                            # =========================================
+
+                            sender_public_key = (
+                                known_public_keys.get(
+                                    sender
+                                )
+                            )
+
+                            if sender_public_key is None:
+
+                                print()
+                                print(
+                                    f"Cannot verify {sender}'s message."
+                                )
+
+                                print(
+                                    f"Use /key {sender} first."
+                                )
+
+                                continue
+
+                            # =========================================
+                            # VERIFY MESSAGE SIGNATURE
+                            # =========================================
+
+                            signature_valid = (
+                                verify_message_signature(
+                                    encrypted_aes_key,
+                                    nonce,
+                                    ciphertext,
+                                    signature,
+                                    sender_public_key
+                                )
+                            )
+
+                            if not signature_valid:
+
+                                print()
+                                print(
+                                    "🚨 SECURITY WARNING 🚨"
+                                )
+
+                                print(
+                                    f"Message signature from "
+                                    f"{sender} is INVALID!"
+                                )
+
+                                print(
+                                    "MESSAGE BLOCKED."
+                                )
+
+                                continue
+
+                            print()
+                            print(
+                                "✓ Message signature verified."
+                            )
+
+                            # =========================================
+                            # DECRYPT MESSAGE
+                            # =========================================
 
                             plaintext = (
                                 decrypt_received_message(
@@ -347,8 +462,7 @@ async def chat_client():
 
                             print()
                             print(
-                                f"{sender}: "
-                                f"{plaintext}"
+                                f"{sender}: {plaintext}"
                             )
 
                             print(
@@ -361,8 +475,7 @@ async def chat_client():
 
                             print()
                             print(
-                                "Could not decrypt "
-                                "message:"
+                                "Could not process message:"
                             )
 
                             print(error)
@@ -380,9 +493,9 @@ async def chat_client():
                         "Connection closed by server."
                     )
 
-            # -----------------------------------------
+            # =========================================
             # START RECEIVER
-            # -----------------------------------------
+            # =========================================
 
             receive_task = asyncio.create_task(
                 receive_messages()
@@ -390,15 +503,15 @@ async def chat_client():
 
             try:
 
-                # -----------------------------------------
+                # =========================================
                 # MAIN INPUT LOOP
-                # -----------------------------------------
+                # =========================================
 
                 while True:
 
-                    # -----------------------------------------
-                    # PROCESS PUBLIC KEY VERIFICATION
-                    # -----------------------------------------
+                    # =========================================
+                    # PROCESS KEY VERIFICATION QUEUE
+                    # =========================================
 
                     try:
 
@@ -407,10 +520,7 @@ async def chat_client():
                             received_key,
                             fingerprint,
                             trusted_fingerprint
-                        ) = (
-                            verification_queue
-                            .get_nowait()
-                        )
+                        ) = verification_queue.get_nowait()
 
                         print()
                         print(
@@ -420,15 +530,14 @@ async def chat_client():
 
                         print()
                         print(
-                            f"{received_username}'s "
-                            "fingerprint:"
+                            f"{received_username}'s fingerprint:"
                         )
 
                         print(fingerprint)
 
-                        # -----------------------------------------
+                        # =========================================
                         # TRUSTED KEY EXISTS
-                        # -----------------------------------------
+                        # =========================================
 
                         if trusted_fingerprint is not None:
 
@@ -447,8 +556,7 @@ async def chat_client():
 
                                 print()
                                 print(
-                                    f"✓ {received_username}'s "
-                                    "key verified."
+                                    "✓ Trusted public key verified."
                                 )
 
                             else:
@@ -459,8 +567,7 @@ async def chat_client():
                                 )
 
                                 print(
-                                    f"{received_username}'s "
-                                    "public key has CHANGED!"
+                                    "Public key mismatch!"
                                 )
 
                                 print()
@@ -478,8 +585,6 @@ async def chat_client():
                                     "MESSAGE BLOCKED."
                                 )
 
-                                # Remove the user from
-                                # verified users
                                 verified_users.discard(
                                     received_username
                                 )
@@ -489,9 +594,9 @@ async def chat_client():
                                     None
                                 )
 
-                        # -----------------------------------------
+                        # =========================================
                         # FIRST TIME KEY
-                        # -----------------------------------------
+                        # =========================================
 
                         else:
 
@@ -508,8 +613,7 @@ async def chat_client():
                             )
 
                             answer = input(
-                                "Trust this key? "
-                                "(yes/no): "
+                                "Trust this key? (yes/no): "
                             ).strip().lower()
 
                             if answer == "yes":
@@ -528,26 +632,22 @@ async def chat_client():
                                 )
 
                                 print(
-                                    "Trusted "
-                                    f"{received_username}'s "
-                                    "public key."
+                                    "Trusted public key saved."
                                 )
 
                             else:
 
                                 print(
-                                    f"Did not trust "
-                                    f"{received_username}'s "
-                                    "key."
+                                    "Key rejected."
                                 )
 
                     except asyncio.QueueEmpty:
 
                         pass
 
-                    # -----------------------------------------
+                    # =========================================
                     # USER INPUT
-                    # -----------------------------------------
+                    # =========================================
 
                     message = await asyncio.to_thread(
                         input,
@@ -557,18 +657,20 @@ async def chat_client():
                     message = message.strip()
 
                     if not message:
+
                         continue
 
-                    # -----------------------------------------
+                    # =========================================
                     # EXIT
-                    # -----------------------------------------
+                    # =========================================
 
                     if message.lower() == "exit":
+
                         break
 
-                    # -----------------------------------------
+                    # =========================================
                     # REQUEST PUBLIC KEY
-                    # -----------------------------------------
+                    # =========================================
 
                     if message.startswith("/key "):
 
@@ -587,15 +689,17 @@ async def chat_client():
                             continue
 
                         await websocket.send(
-                            f"KEY_REQUEST|"
-                            f"{requested_user}"
+                            f"KEY_REQUEST|{requested_user}"
                         )
 
-                        # Allow receiver task to
-                        # process server response
+                        # Give receiver task time
+                        # to process the response
                         await asyncio.sleep(0.2)
 
-                        # Process queued verification
+                        # =========================================
+                        # PROCESS KEY VERIFICATION
+                        # =========================================
+
                         while (
                             not verification_queue.empty()
                         ):
@@ -617,15 +721,14 @@ async def chat_client():
 
                             print()
                             print(
-                                f"{received_username}'s "
-                                "fingerprint:"
+                                f"{received_username}'s fingerprint:"
                             )
 
                             print(fingerprint)
 
-                            # -----------------------------------------
+                            # =========================================
                             # TRUSTED FINGERPRINT
-                            # -----------------------------------------
+                            # =========================================
 
                             if trusted_fingerprint is not None:
 
@@ -644,8 +747,7 @@ async def chat_client():
 
                                     print()
                                     print(
-                                        "Trusted public "
-                                        "key verified."
+                                        "✓ Trusted public key verified."
                                     )
 
                                 else:
@@ -672,9 +774,9 @@ async def chat_client():
                                         None
                                     )
 
-                            # -----------------------------------------
+                            # =========================================
                             # NEW FINGERPRINT
-                            # -----------------------------------------
+                            # =========================================
 
                             else:
 
@@ -691,8 +793,7 @@ async def chat_client():
                                 )
 
                                 answer = input(
-                                    "Trust this key? "
-                                    "(yes/no): "
+                                    "Trust this key? (yes/no): "
                                 ).strip().lower()
 
                                 if answer == "yes":
@@ -711,8 +812,7 @@ async def chat_client():
                                     )
 
                                     print(
-                                        "Trusted public "
-                                        "key."
+                                        "Trusted public key saved."
                                     )
 
                                 else:
@@ -723,9 +823,9 @@ async def chat_client():
 
                         continue
 
-                    # -----------------------------------------
+                    # =========================================
                     # MESSAGE FORMAT
-                    # -----------------------------------------
+                    # =========================================
 
                     try:
 
@@ -757,16 +857,16 @@ async def chat_client():
 
                         continue
 
-                    # -----------------------------------------
+                    # =========================================
                     # CHECK RECIPIENT KEY
-                    # -----------------------------------------
+                    # =========================================
 
                     if recipient not in verified_users:
 
                         print()
                         print(
-                            f"❌ {recipient}'s "
-                            "public key is not verified."
+                            f"✗ {recipient}'s public key "
+                            "is not verified."
                         )
 
                         print(
@@ -781,9 +881,9 @@ async def chat_client():
                         ]
                     )
 
-                    # -----------------------------------------
+                    # =========================================
                     # HYBRID ENCRYPTION
-                    # -----------------------------------------
+                    # =========================================
 
                     (
                         encrypted_aes_key,
@@ -794,9 +894,20 @@ async def chat_client():
                         recipient_public_key
                     )
 
-                    # -----------------------------------------
+                    # =========================================
+                    # CREATE MESSAGE SIGNATURE
+                    # =========================================
+
+                    signature = create_message_signature(
+                        encrypted_aes_key,
+                        nonce,
+                        ciphertext,
+                        private_key
+                    )
+
+                    # =========================================
                     # CREATE ENCRYPTED PACKAGE
-                    # -----------------------------------------
+                    # =========================================
 
                     encrypted_package = {
 
@@ -807,20 +918,24 @@ async def chat_client():
                             nonce.hex(),
 
                         "ciphertext":
-                            ciphertext.hex()
+                            ciphertext.hex(),
+
+                        "signature":
+                            signature.hex()
                     }
 
-                    # -----------------------------------------
-                    # SEND ENCRYPTED MESSAGE
-                    # -----------------------------------------
+                    # =========================================
+                    # SEND MESSAGE
+                    # =========================================
 
                     await websocket.send(
                         f"{recipient}|"
                         f"{json.dumps(encrypted_package)}"
                     )
 
+                    print()
                     print(
-                        "Encrypted message sent."
+                        "Encrypted and signed message sent."
                     )
 
             finally:

@@ -14,10 +14,55 @@ connected_users = {}
 public_keys = {}
 
 
+BASE_DIR = os.path.dirname(
+    os.path.dirname(
+        os.path.abspath(__file__)
+    )
+)
+
+CLIENT_KEYS_DIR = os.path.join(
+    BASE_DIR,
+    "client",
+    "keys"
+)
+
+
+# --------------------------------------------------
+# Load registered public keys
+# --------------------------------------------------
+
+def load_registered_public_key(username):
+
+    key_path = os.path.join(
+        CLIENT_KEYS_DIR,
+        f"{username}_public.pem"
+    )
+
+    if not os.path.exists(key_path):
+        return None, None
+
+    with open(
+        key_path,
+        "rb"
+    ) as file:
+
+        key_text = file.read().decode(
+            "utf-8"
+        )
+
+    key = serialization.load_pem_public_key(
+        key_text.encode("utf-8")
+    )
+
+    return key, key_text
+
+
 # --------------------------------------------------
 # Load attacker's public key
 # --------------------------------------------------
+
 ATTACKER_KEY_PATH = os.path.join(
+    BASE_DIR,
     "client",
     "attacker_public.pem"
 )
@@ -31,6 +76,10 @@ with open(
         file.read().decode("utf-8")
     )
 
+
+# --------------------------------------------------
+# Handle client
+# --------------------------------------------------
 
 async def handle_client(websocket):
 
@@ -58,7 +107,30 @@ async def handle_client(websocket):
             return
 
         # --------------------------------------------------
-        # 2. Receive public key
+        # 2. Check registered identity
+        # --------------------------------------------------
+
+        registered_key, registered_key_text = (
+            load_registered_public_key(
+                username
+            )
+        )
+
+        if registered_key is None:
+
+            print(
+                f"Unknown user attempted "
+                f"authentication: {username}"
+            )
+
+            await websocket.send(
+                "AUTH_FAILED|Unknown user"
+            )
+
+            return
+
+        # --------------------------------------------------
+        # 3. Receive submitted public key
         # --------------------------------------------------
 
         public_key_text = (
@@ -67,7 +139,7 @@ async def handle_client(websocket):
 
         try:
 
-            public_key = (
+            submitted_public_key = (
                 serialization.load_pem_public_key(
                     public_key_text.encode()
                 )
@@ -81,6 +153,7 @@ async def handle_client(websocket):
 
             return
 
+        print()
         print(
             f"{username} connected."
         )
@@ -91,10 +164,65 @@ async def handle_client(websocket):
         )
 
         # --------------------------------------------------
-        # 3. Authentication challenge
+        # 4. Compare submitted key with registered key
         # --------------------------------------------------
 
-        challenge = secrets.token_bytes(32)
+        submitted_public_bytes = (
+            submitted_public_key.public_bytes(
+                encoding=serialization.Encoding.DER,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo
+            )
+        )
+
+        registered_public_bytes = (
+            registered_key.public_bytes(
+                encoding=serialization.Encoding.DER,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo
+            )
+        )
+
+        if (
+            submitted_public_bytes
+            != registered_public_bytes
+        ):
+
+            print()
+            print(
+                "🚨 SECURITY ALERT 🚨"
+            )
+
+            print(
+                f"Public key mismatch for "
+                f"{username}."
+            )
+
+            print(
+                "Submitted key does NOT match "
+                "the registered key."
+            )
+
+            print(
+                "Authentication BLOCKED."
+            )
+
+            await websocket.send(
+                "AUTH_FAILED|Public key does not match registered key"
+            )
+
+            return
+
+        print(
+            "Public key matches registered "
+            "identity."
+        )
+
+        # --------------------------------------------------
+        # 5. Generate authentication challenge
+        # --------------------------------------------------
+
+        challenge = secrets.token_bytes(
+            32
+        )
 
         await websocket.send(
             "AUTH_CHALLENGE|"
@@ -107,7 +235,7 @@ async def handle_client(websocket):
         )
 
         # --------------------------------------------------
-        # 4. Receive signature
+        # 6. Receive signature
         # --------------------------------------------------
 
         response = await websocket.recv()
@@ -123,7 +251,10 @@ async def handle_client(websocket):
             return
 
         signature_hex = (
-            response.split("|", 1)[1]
+            response.split(
+                "|",
+                1
+            )[1]
         )
 
         try:
@@ -141,22 +272,22 @@ async def handle_client(websocket):
             return
 
         # --------------------------------------------------
-        # 5. Verify signature
+        # 7. Verify signature using REGISTERED key
         # --------------------------------------------------
 
         try:
 
-            public_key.verify(
+            registered_key.verify(
+
                 signature,
+
                 challenge,
 
                 padding.PSS(
                     mgf=padding.MGF1(
                         algorithm=hashes.SHA256()
                     ),
-                    salt_length=(
-                        padding.PSS.MAX_LENGTH
-                    )
+                    salt_length=padding.PSS.MAX_LENGTH
                 ),
 
                 hashes.SHA256()
@@ -169,11 +300,12 @@ async def handle_client(websocket):
             authenticated = False
 
         # --------------------------------------------------
-        # 6. Authentication result
+        # 8. Authentication result
         # --------------------------------------------------
 
         if not authenticated:
 
+            print()
             print(
                 f"Authentication FAILED "
                 f"for {username}."
@@ -185,31 +317,35 @@ async def handle_client(websocket):
 
             return
 
+        print()
         print(
             f"✓ {username} authenticated "
             f"successfully."
         )
 
         # --------------------------------------------------
-        # 7. Register authenticated user
+        # 9. Register authenticated user
         # --------------------------------------------------
 
-        connected_users[username] = websocket
+        connected_users[
+            username
+        ] = websocket
 
-        public_keys[username] = (
-            public_key_text
-        )
+        public_keys[
+            username
+        ] = registered_key_text
 
         await websocket.send(
             "AUTH_SUCCESS"
         )
 
         # --------------------------------------------------
-        # 8. Handle messages
+        # 10. Handle messages
         # --------------------------------------------------
 
         async for message in websocket:
 
+            print()
             print(
                 f"Message received from "
                 f"{username}"
@@ -224,7 +360,10 @@ async def handle_client(websocket):
             ):
 
                 requested_user = (
-                    message.split("|", 1)[1]
+                    message.split(
+                        "|",
+                        1
+                    )[1]
                 )
 
                 requested_user = (
@@ -241,9 +380,6 @@ async def handle_client(websocket):
 
                     # --------------------------------------------------
                     # ATTACK SIMULATION
-                    #
-                    # When Alice requests Bob's key,
-                    # send the attacker's public key instead.
                     # --------------------------------------------------
 
                     if (
@@ -258,8 +394,8 @@ async def handle_client(websocket):
 
                         print(
                             "Replacing Bob's "
-                            "public key with "
-                            "attacker's public key."
+                            "registered public key "
+                            "with attacker's key."
                         )
 
                         key_to_send = (
@@ -295,7 +431,10 @@ async def handle_client(websocket):
             try:
 
                 recipient, message_text = (
-                    message.split("|", 1)
+                    message.split(
+                        "|",
+                        1
+                    )
                 )
 
                 recipient = (
@@ -361,6 +500,10 @@ async def handle_client(websocket):
             )
 
 
+# --------------------------------------------------
+# Start attack-test server
+# --------------------------------------------------
+
 async def main():
 
     print()
@@ -388,4 +531,6 @@ async def main():
 
 if __name__ == "__main__":
 
-    asyncio.run(main())
+    asyncio.run(
+        main()
+    )

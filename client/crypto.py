@@ -3,12 +3,15 @@ import os
 
 from rsa_keys import (
     encrypt_with_public_key,
-    decrypt_with_private_key
+    decrypt_with_private_key,
+    sign_data,
+    verify_signature
 )
 
 
 def generate_aes_key():
     """Generate a random 256-bit AES key."""
+
     return AESGCM.generate_key(
         bit_length=256
     )
@@ -32,7 +35,7 @@ def encrypt_message(message, key):
 
 
 def decrypt_message(nonce, ciphertext, key):
-    """Decrypt an AES-256-GCM encrypted message."""
+    """Decrypt a message using AES-256-GCM."""
 
     aes = AESGCM(key)
 
@@ -102,3 +105,51 @@ def decrypt_received_message(
     )
 
     return message
+
+
+def create_message_signature(
+    encrypted_aes_key,
+    nonce,
+    ciphertext,
+    sender_private_key
+):
+    """
+    Create an RSA-PSS signature over the
+    encrypted message package.
+    """
+
+    data_to_sign = (
+        encrypted_aes_key
+        + nonce
+        + ciphertext
+    )
+
+    return sign_data(
+        data_to_sign,
+        sender_private_key
+    )
+
+
+def verify_message_signature(
+    encrypted_aes_key,
+    nonce,
+    ciphertext,
+    signature,
+    sender_public_key
+):
+    """
+    Verify the RSA-PSS signature of an
+    encrypted message package.
+    """
+
+    data_to_verify = (
+        encrypted_aes_key
+        + nonce
+        + ciphertext
+    )
+
+    return verify_signature(
+        data_to_verify,
+        signature,
+        sender_public_key
+    )
