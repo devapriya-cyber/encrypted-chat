@@ -1,6 +1,7 @@
 import asyncio
 import json
 import secrets
+import sys
 
 import websockets
 from cryptography.hazmat.primitives import serialization
@@ -25,8 +26,10 @@ from trusted_keys import (
 )
 
 
-SERVER_URL = "ws://localhost:8765"
-
+if "--attack-test" in sys.argv:
+    SERVER_URL = "ws://localhost:8766"
+else:
+    SERVER_URL = "ws://localhost:8765"
 
 def public_key_to_text(public_key):
 
